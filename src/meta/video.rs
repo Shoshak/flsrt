@@ -24,4 +24,3 @@ pub fn fill_table(lua: &mlua::Lua, path: &std::path::Path) -> anyhow::Result<mlu
     table.set("length", video_length)?;
     Ok(table)
 }
-

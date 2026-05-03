@@ -85,6 +85,7 @@ fn process_file(
                     Ok(())
                 } else {
                     Err(e)
+                        .with_context(|| format!("Failed to move {} to {}", path.display(), target))
                 }
             }
         }?;
