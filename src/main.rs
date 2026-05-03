@@ -1,3 +1,5 @@
+mod meta;
+
 use anyhow::{Context, anyhow};
 use clap::Parser;
 use mlua::LuaSerdeExt;
@@ -29,41 +31,11 @@ struct Action {
     r#move: Option<String>,
 }
 
-fn get_video_length(path: &Path) -> anyhow::Result<f64> {
-    let output = std::process::Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            path.to_str().expect("Invalid UTF-8 string"),
-        ])
-        .output()?;
-    let utf8_stdout = String::from_utf8(output.stdout)?;
-    let duration_str = utf8_stdout.trim();
-    let duration: f64 = duration_str.parse()?;
-    Ok(duration)
-}
-
-fn construct_world(lua: &mlua::Lua, path: &Path) -> anyhow::Result<()> {
+fn fill_meta(lua: &mlua::Lua, path: &Path) -> anyhow::Result<()> {
     let meta = lua.create_table()?;
 
-    let file = lua.create_table()?;
-    file.set("name", path.file_name().unwrap());
-    file.set(
-        "path",
-        path.to_str().expect("Invalid UTF-8 string").to_owned(),
-    )?;
-    meta.set("file", file)?;
-
-    let video = lua.create_table()?;
-    let video_length = lua.create_function(|_, p: PathBuf| {
-        get_video_length(&p).map_err(|e| mlua::Error::external(e))
-    })?;
-    video.set("length", video_length)?;
-    meta.set("video", video)?;
+    meta.set("file", meta::file::fill_table(lua, path)?)?;
+    meta.set("video", meta::video::fill_table(lua, path)?)?;
 
     let globals = lua.globals();
     globals.set("meta", meta)?;
@@ -77,7 +49,7 @@ fn process_file(
     path: &Path,
     config_dir: &Path,
 ) -> anyhow::Result<()> {
-    construct_world(lua, path).context("Failed to fill meta")?;
+    fill_meta(lua, path).context("Failed to fill meta")?;
 
     let script = std::fs::read_to_string(config_dir.join("scripts").join(&rule.script))
         .with_context(|| format!("Failed to read script {}", rule.script))?;
