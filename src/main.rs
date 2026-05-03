@@ -47,11 +47,11 @@ fn process_file(
     lua: &mlua::Lua,
     rule: &Rule,
     path: &Path,
-    config_dir: &Path,
+    scripts_dir: &Path,
 ) -> anyhow::Result<()> {
     fill_meta(lua, path).context("Failed to fill meta")?;
 
-    let script = std::fs::read_to_string(config_dir.join("scripts").join(&rule.script))
+    let script = std::fs::read_to_string(scripts_dir.join(&rule.script))
         .with_context(|| format!("Failed to read script {}", rule.script))?;
     let value: mlua::Value = lua.load(script).eval().context("Failed to eval")?;
     let action: Action = lua.from_value(value).context("Failed to deserialize")?;
@@ -102,7 +102,6 @@ fn main() -> anyhow::Result<()> {
         Some(r) => Ok(r),
         None => {
             if let Some(mut config_dir) = dirs::config_dir() {
-                // TODO "Create folder"
                 config_dir.push("flsrt");
                 Ok(config_dir)
             } else {
@@ -112,14 +111,26 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }?;
+
+    if !config_dir.exists() {
+        std::fs::create_dir(&config_dir)?;
+    }
+    let rules_dir = config_dir.join("rules");
+    if !rules_dir.exists() {
+        std::fs::create_dir(&rules_dir)?;
+    }
+    let scripts_dir = config_dir.join("scripts");
+    if !scripts_dir.exists() {
+        std::fs::create_dir(&scripts_dir)?;
+    }
+
     let listen = cli.listen;
 
-    let rule_files = config_dir
-        .join("rules")
+    let rule_files = rules_dir
         .read_dir()
-        .with_context(|| format!("Failed to read rules directory {}", config_dir.display()))?
+        .with_context(|| format!("Failed to read rules directory {}", rules_dir.display()))?
         .collect::<std::io::Result<Vec<std::fs::DirEntry>>>()
-        .with_context(|| format!("Failed to iterate directory {}", config_dir.display()))?;
+        .with_context(|| format!("Failed to iterate directory {}", rules_dir.display()))?;
     for rf in rule_files {
         let rule_path = rf.path();
         let content = std::fs::read_to_string(&rule_path)
@@ -148,7 +159,7 @@ fn main() -> anyhow::Result<()> {
                     })?;
 
                 for pf in process_files {
-                    process_file(&lua, &rule, &pf.path(), &config_dir).with_context(|| {
+                    process_file(&lua, &rule, &pf.path(), &scripts_dir).with_context(|| {
                         format!(
                             "Failed to apply rule {} to file {}",
                             rule.name,
