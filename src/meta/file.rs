@@ -73,7 +73,7 @@ impl FileMeta {
                 .expect("Invalid UTF-8 file name")
                 .to_owned(),
             path: path.to_owned(),
-            metadata: meta
+            metadata: meta,
         }
     }
 }

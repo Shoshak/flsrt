@@ -13,11 +13,11 @@ impl VideoMeta {
 }
 
 impl mlua::IntoLua for VideoMeta {
-   fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+    fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
         let table = lua.create_table()?;
         table.set("length", self.length)?;
         Ok(mlua::Value::Table(table))
-   }
+    }
 }
 
 fn get_video_length(path: std::path::PathBuf) -> anyhow::Result<f64> {

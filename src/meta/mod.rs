@@ -1,8 +1,8 @@
 pub mod file;
 pub mod video;
 
+use mlua::{FromLuaMulti, IntoLuaMulti};
 use std::path::PathBuf;
-use mlua::{IntoLuaMulti, FromLuaMulti};
 
 pub struct Request<A: FromLuaMulti, R: IntoLuaMulti> {
     get: Box<dyn Fn(A) -> anyhow::Result<R> + 'static>,
@@ -16,7 +16,9 @@ impl<A: FromLuaMulti, R: IntoLuaMulti> Request<A, R> {
 
 impl<A: FromLuaMulti + 'static, R: IntoLuaMulti + 'static> mlua::IntoLua for Request<A, R> {
     fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
-        let func = lua.create_function(move |_, arg: A| (self.get)(arg).map_err(|e| mlua::Error::external(e)))?;
+        let func = lua.create_function(move |_, arg: A| {
+            (self.get)(arg).map_err(|e| mlua::Error::external(e))
+        })?;
         Ok(mlua::Value::Function(func))
     }
 }
