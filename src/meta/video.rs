@@ -1,5 +1,5 @@
-use crate::meta::Request;
 use crate::into_lua;
+use crate::meta::Request;
 
 into_lua! {
     pub struct VideoMeta {

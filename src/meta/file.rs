@@ -1,5 +1,5 @@
-use std::time::SystemTime;
 use crate::into_lua;
+use std::time::SystemTime;
 
 into_lua! {
     pub struct FileMeta {
