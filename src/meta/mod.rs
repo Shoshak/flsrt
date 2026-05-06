@@ -1,8 +1,7 @@
 pub mod file;
 pub mod video;
 
-use mlua::{FromLuaMulti, IntoLuaMulti, LuaSerdeExt};
-use std::path::PathBuf;
+use mlua::{FromLuaMulti, IntoLuaMulti};
 
 pub struct Request<A: FromLuaMulti, R: IntoLuaMulti> {
     get: Box<dyn Fn(A) -> anyhow::Result<R> + 'static>,
@@ -48,7 +47,7 @@ pub fn fill_meta(lua: &mlua::Lua, path: &std::path::Path) -> mlua::Result<()> {
     let meta = lua.create_table()?;
 
     meta.set("file", file::FileMeta::new(path))?;
-    meta.set("video", video::VideoMeta::new(path))?;
+    meta.set("video", video::VideoMeta::new())?;
 
     let globals = lua.globals();
     globals.set("meta", meta)?;

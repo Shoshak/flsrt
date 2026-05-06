@@ -8,7 +8,7 @@ into_lua! {
 }
 
 impl VideoMeta {
-    pub fn new(path: &std::path::Path) -> VideoMeta {
+    pub fn new() -> VideoMeta {
         VideoMeta {
             length: Request::new(|p| get_video_length(p)),
         }

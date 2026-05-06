@@ -3,7 +3,7 @@ mod meta;
 use anyhow::{Context, anyhow};
 use clap::Parser;
 use mlua::LuaSerdeExt;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
