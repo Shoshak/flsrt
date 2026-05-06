@@ -1,7 +1,7 @@
 pub mod file;
 pub mod video;
 
-use mlua::{FromLuaMulti, IntoLuaMulti};
+use mlua::{FromLuaMulti, IntoLuaMulti, LuaSerdeExt};
 use std::path::PathBuf;
 
 pub struct Request<A: FromLuaMulti, R: IntoLuaMulti> {
@@ -20,6 +20,27 @@ impl<A: FromLuaMulti + 'static, R: IntoLuaMulti + 'static> mlua::IntoLua for Req
             (self.get)(arg).map_err(|e| mlua::Error::external(e))
         })?;
         Ok(mlua::Value::Function(func))
+    }
+}
+
+#[macro_export]
+macro_rules! into_lua {
+    (pub struct $name:ident {
+        $($field_name:ident: $field_type:ty,)*
+    }) => {
+        pub struct $name {
+            $($field_name: $field_type,)*
+        }
+
+        impl mlua::IntoLua for $name {
+            fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                let table = lua.create_table()?;
+                $(
+                    table.set(stringify!($field_name), self.$field_name)?;
+                )*
+                Ok(mlua::Value::Table(table))
+            }
+        }
     }
 }
 

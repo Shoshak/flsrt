@@ -1,7 +1,10 @@
 use crate::meta::Request;
+use crate::into_lua;
 
-pub struct VideoMeta {
-    length: Request<std::path::PathBuf, f64>,
+into_lua! {
+    pub struct VideoMeta {
+        length: Request<std::path::PathBuf, f64>,
+    }
 }
 
 impl VideoMeta {
@@ -9,14 +12,6 @@ impl VideoMeta {
         VideoMeta {
             length: Request::new(|p| get_video_length(p)),
         }
-    }
-}
-
-impl mlua::IntoLua for VideoMeta {
-    fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
-        let table = lua.create_table()?;
-        table.set("length", self.length)?;
-        Ok(mlua::Value::Table(table))
     }
 }
 

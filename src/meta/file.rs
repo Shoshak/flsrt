@@ -1,24 +1,29 @@
 use std::time::SystemTime;
+use crate::into_lua;
 
-pub struct FileMeta {
-    name: String,
-    path: std::path::PathBuf,
-    metadata: Option<OsMetadata>,
+into_lua! {
+    pub struct FileMeta {
+        name: String,
+        path: std::path::PathBuf,
+        metadata: Option<OsMetadata>,
+    }
 }
 
-pub struct OsMetadata {
-    size: u64,
+into_lua! {
+    pub struct OsMetadata {
+        size: u64,
 
-    created: Option<u64>,
-    accessed: Option<u64>,
-    modified: Option<u64>,
+        created: Option<u64>,
+        accessed: Option<u64>,
+        modified: Option<u64>,
 
-    is_file: bool,
-    is_dir: bool,
-    is_symlink: bool,
+        is_file: bool,
+        is_dir: bool,
+        is_symlink: bool,
 
-    readonly: bool,
-    mode: Option<u32>,
+        readonly: bool,
+        mode: Option<u32>,
+    }
 }
 
 fn to_epoch(t: SystemTime) -> Result<u64, std::time::SystemTimeError> {
@@ -75,33 +80,5 @@ impl FileMeta {
             path: path.to_owned(),
             metadata: meta,
         }
-    }
-}
-
-impl mlua::IntoLua for FileMeta {
-    fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
-        let table = lua.create_table()?;
-        table.set("name", self.name)?;
-        table.set("path", self.path)?;
-
-        if let Some(m) = self.metadata {
-            let mt = lua.create_table()?;
-            mt.set("size", m.size)?;
-
-            mt.set("created", m.created)?;
-            mt.set("accessed", m.accessed)?;
-            mt.set("modified", m.modified)?;
-
-            mt.set("is_file", m.is_file)?;
-            mt.set("is_dir", m.is_dir)?;
-            mt.set("is_symlink", m.is_symlink)?;
-
-            mt.set("readonly", m.readonly)?;
-            mt.set("mode", m.mode)?;
-
-            table.set("metadata", mt);
-        }
-
-        Ok(mlua::Value::Table(table))
     }
 }
