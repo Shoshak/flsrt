@@ -1,4 +1,26 @@
-fn get_video_length(path: &std::path::Path) -> anyhow::Result<f64> {
+use crate::meta::Request;
+
+pub struct VideoMeta {
+    length: Request<std::path::PathBuf, f64>,
+}
+
+impl VideoMeta {
+    pub fn new(path: &std::path::Path) -> VideoMeta {
+        VideoMeta {
+            length: Request::new(|p| get_video_length(p)),
+        }
+    }
+}
+
+impl mlua::IntoLua for VideoMeta {
+   fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+        let table = lua.create_table()?;
+        table.set("length", self.length)?;
+        Ok(mlua::Value::Table(table))
+   }
+}
+
+fn get_video_length(path: std::path::PathBuf) -> anyhow::Result<f64> {
     let output = std::process::Command::new("ffprobe")
         .args([
             "-v",
@@ -14,13 +36,4 @@ fn get_video_length(path: &std::path::Path) -> anyhow::Result<f64> {
     let duration_str = utf8_stdout.trim();
     let duration: f64 = duration_str.parse()?;
     Ok(duration)
-}
-
-pub fn fill_table(lua: &mlua::Lua, path: &std::path::Path) -> anyhow::Result<mlua::Table> {
-    let table = lua.create_table()?;
-    let video_length = lua.create_function(|_, p: std::path::PathBuf| {
-        get_video_length(&p).map_err(|e| mlua::Error::external(e))
-    })?;
-    table.set("length", video_length)?;
-    Ok(table)
 }

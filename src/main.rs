@@ -31,25 +31,13 @@ struct Action {
     r#move: Option<String>,
 }
 
-fn fill_meta(lua: &mlua::Lua, path: &Path) -> anyhow::Result<()> {
-    let meta = lua.create_table()?;
-
-    meta.set("file", meta::file::fill_table(lua, path)?)?;
-    meta.set("video", meta::video::fill_table(lua, path)?)?;
-
-    let globals = lua.globals();
-    globals.set("meta", meta)?;
-
-    Ok(())
-}
-
 fn process_file(
     lua: &mlua::Lua,
     rule: &Rule,
     path: &Path,
     scripts_dir: &Path,
 ) -> anyhow::Result<()> {
-    fill_meta(lua, path).context("Failed to fill meta")?;
+    meta::fill_meta(lua, path).context("Failed to fill meta")?;
 
     let script = std::fs::read_to_string(scripts_dir.join(&rule.script))
         .with_context(|| format!("Failed to read script {}", rule.script))?;
