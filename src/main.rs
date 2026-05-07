@@ -22,9 +22,16 @@ struct Rule {
     name: String,
     paths: Vec<PathBuf>,
     script: String,
+
+    immediately: Option<bool>,
+    listen: Option<bool>,
+    every: Option<u32>,
+
     description: Option<String>,
     groups: Option<Vec<String>>,
+
     recursive: Option<bool>,
+
     disabled: Option<bool>,
 }
 
@@ -168,9 +175,10 @@ fn main() -> anyhow::Result<()> {
         "Finished processing rules. Total rule count: {}",
         rules.len()
     );
+    
 
-    if !cli.listen {
-        for rule in rules {
+    for rule in rules {
+        if rule.immediately.unwrap_or(true) {
             for p in &rule.paths {
                 let process_files = get_dir_contents(p).with_context(|| {
                     format!(
@@ -191,8 +199,14 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-    } else {
-        todo!("Implement listening to filesystem changes");
+
+        if rule.listen.unwrap_or(false) {
+            todo!("Implement listening to directory updates");
+        }
+
+        if let Some(e) = rule.every {
+            todo!("Implement ticking rules");
+        }
     }
 
     Ok(())
