@@ -25,7 +25,7 @@ struct Rule {
     description: Option<String>,
     groups: Option<Vec<String>>,
     recursive: Option<bool>,
-    disable: Option<bool>,
+    disabled: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -156,8 +156,9 @@ fn main() -> anyhow::Result<()> {
     for rf in rule_files {
         match process_rule_file(&rf) {
             Ok(r) => {
-                println!("Rule staged: {}", r.name);
-                rules.push(r);
+                if !r.disabled.unwrap_or(false) {
+                    rules.push(r);
+                }
             }
             Err(e) if cli.fail_fast => Err(e).context(format!("{rf:?}"))?,
             Err(e) => eprintln!("Failed to process rule {rf:?}: {e}"),
