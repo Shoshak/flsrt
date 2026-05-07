@@ -82,6 +82,32 @@ fn process_file(
     Ok(())
 }
 
+struct Directories {
+    rules: PathBuf,
+    scripts: PathBuf
+}
+
+fn create_dir(dir: PathBuf) -> std::io::Result<PathBuf> {
+    match std::fs::create_dir(&dir) {
+        Ok(()) => Ok(dir),
+        Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(dir),
+        Err(e) => Err(e)
+    }
+}
+
+fn prepare_directories(config_dir: PathBuf) -> std::io::Result<Directories> {
+    let config_dir = create_dir(config_dir)?;
+
+    Ok(Directories {
+        rules: create_dir(config_dir.join("rules"))?,
+        scripts: create_dir(config_dir.join("scripts"))?
+    })
+}
+
+fn get_dir_contents(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    dir.read_dir()?.map(|res| res.map(|e| e.path())).collect()
+}
+
 fn main() -> anyhow::Result<()> {
     let lua = mlua::Lua::new();
     let cli = Cli::parse();
@@ -99,59 +125,33 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }?;
+    let dirs = prepare_directories(config_dir).context("Failed to prepare config directory for use")?;
 
-    if !config_dir.exists() {
-        std::fs::create_dir(&config_dir)?;
-    }
-    let rules_dir = config_dir.join("rules");
-    if !rules_dir.exists() {
-        std::fs::create_dir(&rules_dir)?;
-    }
-    let scripts_dir = config_dir.join("scripts");
-    if !scripts_dir.exists() {
-        std::fs::create_dir(&scripts_dir)?;
-    }
-
-    let listen = cli.listen;
-
-    let rule_files = rules_dir
-        .read_dir()
-        .with_context(|| format!("Failed to read rules directory {}", rules_dir.display()))?
-        .collect::<std::io::Result<Vec<std::fs::DirEntry>>>()
-        .with_context(|| format!("Failed to iterate directory {}", rules_dir.display()))?;
+    let rule_files = get_dir_contents(&dirs.rules)
+        .with_context(|| format!("Failed to list the contents of {}", dirs.rules.display()))?;
     for rf in rule_files {
-        let rule_path = rf.path();
-        let content = std::fs::read_to_string(&rule_path)
-            .with_context(|| format!("Failed to read rule file {}", rule_path.display()))?;
+        let content = std::fs::read_to_string(&rf)
+            .with_context(|| format!("Failed to read rule file {}", rf.display()))?;
         let rule: Rule = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse rule {}", rule_path.display()))?;
+            .with_context(|| format!("Failed to parse rule {}", rf.display()))?;
 
-        if !listen {
+        if !cli.listen {
             for p in &rule.paths {
-                let process_files = p
-                    .read_dir()
+                let process_files = get_dir_contents(p)
                     .with_context(|| {
                         format!(
-                            "Failed to read target directory {} for rule {}",
-                            p.display(),
-                            rule.name
-                        )
-                    })?
-                    .collect::<std::io::Result<Vec<std::fs::DirEntry>>>()
-                    .with_context(|| {
-                        format!(
-                            "Failed to iterate directory {} for rule {}",
+                            "Failed to list directory {} contents for rule {}",
                             p.display(),
                             rule.name
                         )
                     })?;
 
                 for pf in process_files {
-                    process_file(&lua, &rule, &pf.path(), &scripts_dir).with_context(|| {
+                    process_file(&lua, &rule, &pf, &dirs.scripts).with_context(|| {
                         format!(
                             "Failed to apply rule {} to file {}",
                             rule.name,
-                            pf.path().display()
+                            pf.display()
                         )
                     })?;
                 }
