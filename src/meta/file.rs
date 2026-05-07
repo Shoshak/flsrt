@@ -2,7 +2,7 @@ use crate::into_lua;
 use std::time::SystemTime;
 
 into_lua! {
-    pub struct FileMeta {
+    pub struct Meta {
         name: String,
         path: std::path::PathBuf,
         metadata: Option<OsMetadata>,
@@ -31,8 +31,8 @@ fn to_epoch(t: SystemTime) -> Result<u64, std::time::SystemTimeError> {
         .map(|d| d.as_secs())
 }
 
-impl FileMeta {
-    pub fn new(path: &std::path::Path) -> FileMeta {
+impl Meta {
+    pub fn new(path: &std::path::Path) -> Meta {
         let meta = if let Ok(m) = path.metadata() {
             let permissions = m.permissions();
             let meta = OsMetadata {
@@ -70,7 +70,7 @@ impl FileMeta {
         } else {
             None
         };
-        FileMeta {
+        Meta {
             name: path
                 .file_name()
                 .unwrap()

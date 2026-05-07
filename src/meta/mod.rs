@@ -43,14 +43,18 @@ macro_rules! into_lua {
     }
 }
 
-pub fn fill_meta(lua: &mlua::Lua, path: &std::path::Path) -> mlua::Result<()> {
-    let meta = lua.create_table()?;
+into_lua! {
+    pub struct Meta {
+        file: file::Meta,
+        video: video::Meta,
+    }
+}
 
-    meta.set("file", file::FileMeta::new(path))?;
-    meta.set("video", video::VideoMeta::new())?;
-
-    let globals = lua.globals();
-    globals.set("meta", meta)?;
-
-    Ok(())
+impl Meta {
+    pub fn new(path: &std::path::Path) -> Meta {
+        Meta {
+            file: file::Meta::new(path),
+            video: video::Meta::new()
+        }
+    }
 }

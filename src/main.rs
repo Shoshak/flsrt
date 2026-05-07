@@ -37,7 +37,7 @@ fn process_file(
     path: &Path,
     scripts_dir: &Path,
 ) -> anyhow::Result<()> {
-    meta::fill_meta(lua, path).context("Failed to fill meta")?;
+    lua.globals().set("meta", meta::Meta::new(path)).context("Failed to fill meta")?;
 
     let script = std::fs::read_to_string(scripts_dir.join(&rule.script))
         .with_context(|| format!("Failed to read script {}", rule.script))?;

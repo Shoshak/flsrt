@@ -2,14 +2,14 @@ use crate::into_lua;
 use crate::meta::Request;
 
 into_lua! {
-    pub struct VideoMeta {
+    pub struct Meta {
         length: Request<std::path::PathBuf, f64>,
     }
 }
 
-impl VideoMeta {
-    pub fn new() -> VideoMeta {
-        VideoMeta {
+impl Meta {
+    pub fn new() -> Meta {
+        Meta {
             length: Request::new(|p| get_video_length(p)),
         }
     }
