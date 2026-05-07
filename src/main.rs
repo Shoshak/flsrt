@@ -18,11 +18,12 @@ struct Cli {
 #[derive(Deserialize)]
 struct Rule {
     name: String,
-    description: String,
-    groups: Vec<String>,
     paths: Vec<PathBuf>,
-    recursive: bool,
     script: String,
+    description: Option<String>,
+    groups: Option<Vec<String>>,
+    recursive: Option<bool>,
+    disable: Option<bool>
 }
 
 #[derive(Deserialize)]
