@@ -13,6 +13,8 @@ struct Cli {
     rules: Option<PathBuf>,
     #[arg(short, long, default_value_t = false)]
     listen: bool,
+    #[arg(short, long, default_value_t = true)]
+    fail_fast: bool,
 }
 
 #[derive(Deserialize)]
@@ -23,7 +25,7 @@ struct Rule {
     description: Option<String>,
     groups: Option<Vec<String>>,
     recursive: Option<bool>,
-    disable: Option<bool>
+    disable: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -90,25 +92,37 @@ struct Directories {
     scripts: PathBuf,
 }
 
-fn create_dir(dir: PathBuf) -> std::io::Result<PathBuf> {
-    match std::fs::create_dir(&dir) {
-        Ok(()) => Ok(dir),
-        Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(dir),
+fn create_dir(dir: &Path) -> std::io::Result<()> {
+    match std::fs::create_dir(dir) {
+        Ok(()) => Ok(()),
+        Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
         Err(e) => Err(e),
     }
 }
 
-fn prepare_directories(config_dir: PathBuf) -> std::io::Result<Directories> {
-    let config_dir = create_dir(config_dir)?;
+fn prepare_directories(config_dir: &Path) -> anyhow::Result<Directories> {
+    create_dir(&config_dir).context(format!("{:?}", config_dir))?;
+
+    let rules_dir = config_dir.join("rules");
+    create_dir(&rules_dir).context(format!("{:?}", rules_dir))?;
+
+    let scripts_dir = config_dir.join("scripts");
+    create_dir(&scripts_dir).context(format!("{:?}", scripts_dir))?;
 
     Ok(Directories {
-        rules: create_dir(config_dir.join("rules"))?,
-        scripts: create_dir(config_dir.join("scripts"))?,
+        rules: rules_dir,
+        scripts: scripts_dir,
     })
 }
 
 fn get_dir_contents(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     dir.read_dir()?.map(|res| res.map(|e| e.path())).collect()
+}
+
+fn process_rule_file(f: &Path) -> anyhow::Result<Rule> {
+    let content = std::fs::read_to_string(&f)?;
+    let rule: Rule = serde_json::from_str(&content)?;
+    Ok(rule)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -128,18 +142,34 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }?;
-    let dirs =
-        prepare_directories(config_dir).context("Failed to prepare config directory for use")?;
 
+    let dirs = prepare_directories(&config_dir).with_context(|| {
+        format!(
+            "Failed to prepare config directory {}",
+            config_dir.display()
+        )
+    })?;
     let rule_files = get_dir_contents(&dirs.rules)
         .with_context(|| format!("Failed to list the contents of {}", dirs.rules.display()))?;
-    for rf in rule_files {
-        let content = std::fs::read_to_string(&rf)
-            .with_context(|| format!("Failed to read rule file {}", rf.display()))?;
-        let rule: Rule = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse rule {}", rf.display()))?;
 
-        if !cli.listen {
+    let mut rules = Vec::with_capacity(rule_files.len());
+    for rf in rule_files {
+        match process_rule_file(&rf) {
+            Ok(r) => {
+                println!("Rule staged: {}", r.name);
+                rules.push(r);
+            }
+            Err(e) if cli.fail_fast => Err(e).context(format!("{rf:?}"))?,
+            Err(e) => eprintln!("Failed to process rule {rf:?}: {e}"),
+        }
+    }
+    println!(
+        "Finished processing rules. Total rule count: {}",
+        rules.len()
+    );
+
+    if !cli.listen {
+        for rule in rules {
             for p in &rule.paths {
                 let process_files = get_dir_contents(p).with_context(|| {
                     format!(
@@ -159,9 +189,9 @@ fn main() -> anyhow::Result<()> {
                     })?;
                 }
             }
-        } else {
-            todo!("Implement listening to filesystem changes");
         }
+    } else {
+        todo!("Implement listening to filesystem changes");
     }
 
     Ok(())
