@@ -54,7 +54,7 @@ impl Meta {
     pub fn new(path: &std::path::Path) -> Meta {
         Meta {
             file: file::Meta::new(path),
-            video: video::Meta::new()
+            video: video::Meta::new(),
         }
     }
 }

@@ -37,7 +37,9 @@ fn process_file(
     path: &Path,
     scripts_dir: &Path,
 ) -> anyhow::Result<()> {
-    lua.globals().set("meta", meta::Meta::new(path)).context("Failed to fill meta")?;
+    lua.globals()
+        .set("meta", meta::Meta::new(path))
+        .context("Failed to fill meta")?;
 
     let script = std::fs::read_to_string(scripts_dir.join(&rule.script))
         .with_context(|| format!("Failed to read script {}", rule.script))?;
@@ -84,14 +86,14 @@ fn process_file(
 
 struct Directories {
     rules: PathBuf,
-    scripts: PathBuf
+    scripts: PathBuf,
 }
 
 fn create_dir(dir: PathBuf) -> std::io::Result<PathBuf> {
     match std::fs::create_dir(&dir) {
         Ok(()) => Ok(dir),
         Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(dir),
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
@@ -100,7 +102,7 @@ fn prepare_directories(config_dir: PathBuf) -> std::io::Result<Directories> {
 
     Ok(Directories {
         rules: create_dir(config_dir.join("rules"))?,
-        scripts: create_dir(config_dir.join("scripts"))?
+        scripts: create_dir(config_dir.join("scripts"))?,
     })
 }
 
@@ -125,7 +127,8 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }?;
-    let dirs = prepare_directories(config_dir).context("Failed to prepare config directory for use")?;
+    let dirs =
+        prepare_directories(config_dir).context("Failed to prepare config directory for use")?;
 
     let rule_files = get_dir_contents(&dirs.rules)
         .with_context(|| format!("Failed to list the contents of {}", dirs.rules.display()))?;
@@ -137,14 +140,13 @@ fn main() -> anyhow::Result<()> {
 
         if !cli.listen {
             for p in &rule.paths {
-                let process_files = get_dir_contents(p)
-                    .with_context(|| {
-                        format!(
-                            "Failed to list directory {} contents for rule {}",
-                            p.display(),
-                            rule.name
-                        )
-                    })?;
+                let process_files = get_dir_contents(p).with_context(|| {
+                    format!(
+                        "Failed to list directory {} contents for rule {}",
+                        p.display(),
+                        rule.name
+                    )
+                })?;
 
                 for pf in process_files {
                     process_file(&lua, &rule, &pf, &dirs.scripts).with_context(|| {
