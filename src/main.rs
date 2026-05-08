@@ -175,7 +175,14 @@ fn main() -> anyhow::Result<()> {
         "Finished processing rules. Total rule count: {}",
         rules.len()
     );
-    
+
+    rules.sort_by(|a, b| a.name.cmp(&b.name));
+
+    println!("Rule order:");
+    rules
+        .iter()
+        .enumerate()
+        .for_each(|(i, r)| println!("{}. {}", i + 1, r.name));
 
     for rule in rules {
         if rule.immediately.unwrap_or(true) {
