@@ -41,18 +41,11 @@ struct Action {
     r#move: Option<String>,
 }
 
-fn process_file(
-    lua: &mlua::Lua,
-    rule: &Rule,
-    path: &Path,
-    scripts_dir: &Path,
-) -> anyhow::Result<()> {
+fn process_file(lua: &mlua::Lua, script: &str, path: &Path) -> anyhow::Result<()> {
     lua.globals()
         .set("meta", meta::Meta::new(path))
         .context("Failed to fill meta")?;
 
-    let script = std::fs::read_to_string(scripts_dir.join(&rule.script))
-        .with_context(|| format!("Failed to read script {}", rule.script))?;
     let value: mlua::Value = lua.load(script).eval().context("Failed to eval")?;
     let action: Action = lua.from_value(value).context("Failed to deserialize")?;
 
@@ -89,6 +82,16 @@ fn process_file(
                 }
             }
         }?;
+    }
+
+    Ok(())
+}
+
+fn process_path(lua: &mlua::Lua, script: &str, path: &Path) -> anyhow::Result<()> {
+    let dir_contents = get_dir_contents(path).with_context(|| format!("{path:?}"))?;
+
+    for f in dir_contents {
+        process_file(&lua, &script, &path).with_context(|| format!("{f:?}"))?;
     }
 
     Ok(())
@@ -185,25 +188,18 @@ fn main() -> anyhow::Result<()> {
         .for_each(|(i, r)| println!("{}. {}", i + 1, r.name));
 
     for rule in rules {
+        let script_file = &rule.script;
+        let script_path = dirs.scripts.join(script_file);
+        let script = std::fs::read_to_string(&script_path).with_context(|| {
+            format!(
+                "Failed to read script file {:?} for rule {}",
+                script_path, rule.name
+            )
+        })?;
+
         if rule.immediately.unwrap_or(true) {
             for p in &rule.paths {
-                let process_files = get_dir_contents(p).with_context(|| {
-                    format!(
-                        "Failed to list directory {} contents for rule {}",
-                        p.display(),
-                        rule.name
-                    )
-                })?;
-
-                for pf in process_files {
-                    process_file(&lua, &rule, &pf, &dirs.scripts).with_context(|| {
-                        format!(
-                            "Failed to apply rule {} to file {}",
-                            rule.name,
-                            pf.display()
-                        )
-                    })?;
-                }
+                process_path(&lua, &script, &p).with_context(|| format!("{}", rule.name))?;
             }
         }
 
