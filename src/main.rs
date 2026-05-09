@@ -1,8 +1,12 @@
 mod meta;
 
+use std::collections::BTreeMap;
+use std::sync::mpsc;
+
 use anyhow::{Context, anyhow};
 use clap::Parser;
 use mlua::LuaSerdeExt;
+use notify::Watcher;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -11,10 +15,6 @@ use std::path::{Path, PathBuf};
 struct Cli {
     #[arg(short, long)]
     rules: Option<PathBuf>,
-    #[arg(short, long, default_value_t = false)]
-    listen: bool,
-    #[arg(short, long, default_value_t = true)]
-    fail_fast: bool,
 }
 
 #[derive(Deserialize)]
@@ -25,7 +25,6 @@ struct Rule {
 
     immediately: Option<bool>,
     listen: Option<bool>,
-    every: Option<u32>,
 
     description: Option<String>,
     groups: Option<Vec<String>>,
@@ -90,6 +89,7 @@ fn process_file(lua: &mlua::Lua, script: &str, path: &Path) -> anyhow::Result<()
 fn process_path(lua: &mlua::Lua, script: &str, path: &Path) -> anyhow::Result<()> {
     let dir_contents = get_dir_contents(path).with_context(|| format!("{path:?}"))?;
 
+    // TODO: recursive iteration
     for f in dir_contents {
         process_file(&lua, &script, &path).with_context(|| format!("{f:?}"))?;
     }
@@ -135,6 +135,38 @@ fn process_rule_file(f: &Path) -> anyhow::Result<Rule> {
     Ok(rule)
 }
 
+enum Event {
+    New { rule: String, path: PathBuf },
+    CtrlC,
+    Error(notify::Error),
+}
+
+struct RuleWatcher {
+    rule: String,
+    sender: mpsc::SyncSender<Event>,
+}
+
+impl notify::EventHandler for RuleWatcher {
+    fn handle_event(&mut self, event: notify::Result<notify::Event>) {
+        match event {
+            Ok(e) => match e.kind {
+                notify::EventKind::Create(notify::event::CreateKind::File) => {
+                    for path in e.paths {
+                        self.sender
+                            .send(Event::New {
+                                path: path,
+                                rule: self.rule.to_string(),
+                            })
+                            .unwrap();
+                    }
+                }
+                _ => {}
+            },
+            Err(e) => self.sender.send(Event::Error(e)).unwrap(),
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let lua = mlua::Lua::new();
     let cli = Cli::parse();
@@ -162,55 +194,95 @@ fn main() -> anyhow::Result<()> {
     let rule_files = get_dir_contents(&dirs.rules)
         .with_context(|| format!("Failed to list the contents of {}", dirs.rules.display()))?;
 
-    let mut rules = Vec::with_capacity(rule_files.len());
+    let mut rules: BTreeMap<String, Rule> = BTreeMap::new();
     for rf in rule_files {
         match process_rule_file(&rf) {
-            Ok(r) => {
-                if !r.disabled.unwrap_or(false) {
-                    rules.push(r);
+            Ok(mut r) => {
+                if r.disabled.unwrap_or(false) {
+                    continue;
                 }
+                if rules.contains_key(&r.name) {
+                    anyhow!("Duplicate rule name {}", r.name);
+                }
+
+                let script_file = &r.script;
+                let script_path = dirs.scripts.join(script_file);
+                let script = std::fs::read_to_string(&script_path).with_context(|| {
+                    format!(
+                        "Failed to read script file {:?} for rule {}",
+                        script_path, r.name
+                    )
+                })?;
+                r.script = script;
+
+                rules.insert(r.name.to_string(), r);
             }
-            Err(e) if cli.fail_fast => Err(e).context(format!("{rf:?}"))?,
-            Err(e) => eprintln!("Failed to process rule {rf:?}: {e}"),
+            Err(e) => Err(e).context(format!("{rf:?}"))?,
         }
     }
+
     println!(
         "Finished processing rules. Total rule count: {}",
         rules.len()
     );
-
-    rules.sort_by(|a, b| a.name.cmp(&b.name));
-
-    println!("Rule order:");
     rules
-        .iter()
+        .values()
         .enumerate()
         .for_each(|(i, r)| println!("{}. {}", i + 1, r.name));
 
-    for rule in rules {
-        let script_file = &rule.script;
-        let script_path = dirs.scripts.join(script_file);
-        let script = std::fs::read_to_string(&script_path).with_context(|| {
-            format!(
-                "Failed to read script file {:?} for rule {}",
-                script_path, rule.name
-            )
-        })?;
+    let (event_tx, event_rx) = mpsc::sync_channel::<Event>(0);
+    let mut watchers: Vec<Box<dyn notify::Watcher>> = Vec::new();
 
+    for rule in rules.values() {
         if rule.immediately.unwrap_or(true) {
+            println!("Running {}...", rule.name);
             for p in &rule.paths {
-                process_path(&lua, &script, &p).with_context(|| format!("{}", rule.name))?;
+                process_path(&lua, &rule.script, &p).with_context(|| format!("{}", rule.name))?;
             }
         }
 
         if rule.listen.unwrap_or(false) {
-            todo!("Implement listening to directory updates");
-        }
-
-        if let Some(e) = rule.every {
-            todo!("Implement ticking rules");
+            println!("Staging {} for file watching...", rule.name);
+            for p in &rule.paths {
+                let handler = RuleWatcher {
+                    rule: rule.name.to_string(),
+                    sender: event_tx.clone(),
+                };
+                let mut watcher = notify::recommended_watcher(handler)?;
+                watcher.watch(
+                    p,
+                    if rule.recursive.unwrap_or(false) {
+                        notify::RecursiveMode::Recursive
+                    } else {
+                        notify::RecursiveMode::NonRecursive
+                    },
+                );
+                watchers.push(Box::new(watcher));
+            }
         }
     }
 
+    if watchers.len() == 0 {
+        println!("No watched rules. Exiting...");
+        return Ok(());
+    }
+
+    println!("Staging complete. And now we wait.");
+
+    let ctrlc_sender = event_tx.clone();
+    ctrlc::set_handler(move || {
+        ctrlc_sender.send(Event::CtrlC).unwrap();
+    })?;
+
+    while let Ok(msg) = event_rx.recv() {
+        match msg {
+            Event::CtrlC => break,
+            Event::New { rule, path } => {
+                let rule = rules.get(&rule).unwrap();
+                process_file(&lua, &rule.script, &path);
+            }
+            Event::Error(e) => Err(e)?,
+        }
+    }
     Ok(())
 }
