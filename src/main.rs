@@ -150,7 +150,7 @@ impl notify::EventHandler for RuleWatcher {
     fn handle_event(&mut self, event: notify::Result<notify::Event>) {
         match event {
             Ok(e) => match e.kind {
-                notify::EventKind::Create(notify::event::CreateKind::File) => {
+                notify::EventKind::Access(notify::event::AccessKind::Close(notify::event::AccessMode::Write)) => {
                     for path in e.paths {
                         self.sender
                             .send(Event::New {
