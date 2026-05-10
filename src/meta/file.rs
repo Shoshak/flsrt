@@ -36,7 +36,7 @@ fn to_epoch(t: SystemTime) -> Result<u64, std::time::SystemTimeError> {
 #[cfg(unix)]
 fn get_mode(perms: std::fs::Permissions) -> Option<u32> {
     use std::os::unix::fs::PermissionsExt;
-    Some(permissions.mode())
+    Some(perms.mode())
 }
 
 #[cfg(not(unix))]
