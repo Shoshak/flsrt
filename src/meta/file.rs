@@ -1,4 +1,6 @@
 use crate::into_lua;
+#[cfg(unix)]
+use std::fs::Permissions;
 use std::time::SystemTime;
 
 into_lua! {
@@ -31,6 +33,17 @@ fn to_epoch(t: SystemTime) -> Result<u64, std::time::SystemTimeError> {
         .map(|d| d.as_secs())
 }
 
+#[cfg(unix)]
+fn get_mode(perms: std::fs::Permissions) -> Option<u32> {
+    use std::os::unix::fs::PermissionsExt;
+    Some(permissions.mode())
+}
+
+#[cfg(not(unix))]
+fn get_mode(_perms: std::fs::Permissions) -> Option<u32> {
+    None
+}
+
 impl Meta {
     pub fn new(path: &std::path::Path) -> Meta {
         let meta = if let Ok(m) = path.metadata() {
@@ -59,12 +72,7 @@ impl Meta {
                 is_symlink: m.is_symlink(),
 
                 readonly: permissions.readonly(),
-                mode: if cfg!(unix) {
-                    use std::os::unix::fs::PermissionsExt;
-                    Some(permissions.mode())
-                } else {
-                    None
-                },
+                mode: get_mode(permissions),
             };
             Some(meta)
         } else {

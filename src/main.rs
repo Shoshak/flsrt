@@ -91,7 +91,7 @@ fn process_path(lua: &mlua::Lua, script: &str, path: &Path) -> anyhow::Result<()
 
     // TODO: recursive iteration
     for f in dir_contents {
-        process_file(&lua, &script, &path).with_context(|| format!("{f:?}"))?;
+        process_file(&lua, &script, &f).with_context(|| format!("{f:?}"))?;
     }
 
     Ok(())
@@ -150,7 +150,9 @@ impl notify::EventHandler for RuleWatcher {
     fn handle_event(&mut self, event: notify::Result<notify::Event>) {
         match event {
             Ok(e) => match e.kind {
-                notify::EventKind::Access(notify::event::AccessKind::Close(notify::event::AccessMode::Write)) => {
+                notify::EventKind::Access(notify::event::AccessKind::Close(
+                    notify::event::AccessMode::Write,
+                )) => {
                     for path in e.paths {
                         self.sender
                             .send(Event::New {
